@@ -143,6 +143,33 @@ func TestETagGives304(t *testing.T) {
 	if w := get(t, h, "/", map[string]string{"Sec-Fetch-Mode": "navigate", "If-None-Match": `W/"чужой"`}); w.Code != http.StatusOK {
 		t.Fatalf("чужой ETag: код %d, ждали 200", w.Code)
 	}
+
+	// 304 обязан нести ту же политику кэша, что и 200: иначе браузер,
+	// получив ответ без Cache-Control, снова применит свою эвристику.
+	if got := second.Header().Get("Cache-Control"); got != CacheRevalidate {
+		t.Errorf("Cache-Control на 304 = %q, ждали %q", got, CacheRevalidate)
+	}
+}
+
+// If-None-Match приходит не только одним значением: браузер шлёт список,
+// прокси добавляет слабые валидаторы, а «*» встречается в условных запросах.
+func TestETagMatches(t *testing.T) {
+	cases := []struct {
+		header, etag string
+		want         bool
+	}{
+		{`"abc"`, `"abc"`, true},
+		{`W/"abc"`, `"abc"`, true},
+		{`"other", "abc"`, `"abc"`, true},
+		{`*`, `"abc"`, true},
+		{`"other"`, `"abc"`, false},
+		{``, `"abc"`, false},
+	}
+	for _, c := range cases {
+		if got := etagMatches(c.header, c.etag); got != c.want {
+			t.Errorf("etagMatches(%q, %q) = %v, ждали %v", c.header, c.etag, got, c.want)
+		}
+	}
 }
 
 func TestGzip(t *testing.T) {

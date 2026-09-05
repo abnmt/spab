@@ -72,6 +72,50 @@ func TestLoad(t *testing.T) {
 	}
 }
 
+// Разбор строки — там, где .env расходится с «просто split по =»:
+// пароль с решёткой, адрес с двоеточиями и ключ, которого не бывает.
+func TestParseLine(t *testing.T) {
+	cases := []struct {
+		in         string
+		key, value string
+		ok         bool
+	}{
+		{`TMDB_API_KEY=abc123`, "TMDB_API_KEY", "abc123", true},
+		{`  SPACED = value  `, "SPACED", "value", true},
+		{`export EXPORTED=1`, "EXPORTED", "1", true},
+		{`QUOTED="hello world"`, "QUOTED", "hello world", true},
+		{`SINGLE='raw \n value'`, "SINGLE", `raw \n value`, true},
+		{`ESCAPED="line\nbreak"`, "ESCAPED", "line\nbreak", true},
+		{`WITH_COMMENT=value # пояснение`, "WITH_COMMENT", "value", true},
+		{`EMPTY=`, "EMPTY", "", true},
+		{`URL=socks5://user:pass@host:1080`, "URL", "socks5://user:pass@host:1080", true},
+
+		// Пароль с решёткой — обычное дело, и он не должен обрезаться.
+		{`RT_PASSWORD=p#ssw0rd`, "RT_PASSWORD", "p#ssw0rd", true},
+		{`RT_PASSWORD="pass with # inside"`, "RT_PASSWORD", "pass with # inside", true},
+
+		{`# просто комментарий`, "", "", false},
+		{``, "", "", false},
+		{`   `, "", "", false},
+		{`БЕЗ_РАВНО`, "", "", false},
+		{`=значение`, "", "", false},
+		{`1BAD=x`, "", "", false},
+		{`BAD-KEY=x`, "", "", false},
+	}
+
+	for _, c := range cases {
+		key, value, ok := parseLine(c.in)
+		if ok != c.ok {
+			t.Errorf("parseLine(%q): ok = %v, ждали %v", c.in, ok, c.ok)
+			continue
+		}
+		if ok && (key != c.key || value != c.value) {
+			t.Errorf("parseLine(%q) = (%q, %q), ждали (%q, %q)",
+				c.in, key, value, c.key, c.value)
+		}
+	}
+}
+
 func TestLoadMissing(t *testing.T) {
 	loaded, applied := Load("", filepath.Join(t.TempDir(), "нет.env"))
 	if loaded != "" || applied != nil {
