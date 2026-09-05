@@ -5,13 +5,8 @@ module github.com/abnmt/spab/pbspa
 
 go 1.27
 
-// ВРЕМЕННО, до первого тега базового модуля. После `git tag v0.1.0`
-// заменить на конкретную версию: replace в зависимости потребитель
-// игнорирует, поэтому require v0.0.0 не разрешится ни у кого.
-replace github.com/abnmt/spab => ../
-
 require (
-	github.com/abnmt/spab v0.0.0
+	github.com/abnmt/spab v0.1.0
 	github.com/pocketbase/pocketbase v0.40.1
 )
 

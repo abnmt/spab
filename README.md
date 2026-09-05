@@ -81,5 +81,18 @@ cd pbspa && GOWORK=off go test ./...
 CI гоняет всё с `GOWORK=off`: workspace умеет прятать забытый `require`,
 а потребитель работает без него.
 
+Обратная сторона: без workspace `pbspa` тянет корневой модуль по сети —
+`require github.com/abnmt/spab v0.1.0`, никакого `replace` там больше нет.
+Пока репозиторий приватный, `proxy.golang.org` до него не достаёт, и
+такой команде нужен доступ в git:
+
+```bash
+export GOPRIVATE='github.com/abnmt/*'
+git config --global url."git@github.com:".insteadOf "https://github.com/"
+```
+
+С `go.work` (то есть просто `go test ./...` из корня) ничего этого не
+надо — берётся соседний каталог.
+
 Корневой модуль обязан оставаться без зависимостей — это проверяется в
 CI отдельным шагом. Всё, что тянет чужой код, живёт в подмодулях.
