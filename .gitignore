@@ -1,0 +1,4 @@
+go.work.sum
+build/
+*.test
+.DS_Store

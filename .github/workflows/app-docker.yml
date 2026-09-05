@@ -1,0 +1,109 @@
+# Общая публикация образа приложения в GHCR.
+#
+# Переиспользуемый workflow обязан лежать в .github/workflows корня
+# репозитория — из подкаталога workflow_call не вызывается. Отсюда и
+# один общий репозиторий на все артефакты.
+#
+# Подключение в приложении — .github/workflows/docker.yml целиком:
+#
+#     name: docker
+#     on:
+#       push:
+#         tags: ['v*']
+#     jobs:
+#       publish:
+#         uses: abnmt/spab/.github/workflows/app-docker.yml@v0.1.0
+#         permissions:
+#           contents: read
+#           packages: write
+#         with:
+#           build-args: |
+#             SOMETHING=value
+#         secrets:
+#           secret-build-args: |
+#             NUXT_PUBLIC_PRIMEUI_LICENSE=${{ secrets.PRIMEUI_LICENSE }}
+name: app-docker
+
+on:
+  workflow_call:
+    inputs:
+      image:
+        description: имя пакета в GHCR; по умолчанию имя репозитория
+        type: string
+        required: false
+        default: ''
+      platforms:
+        type: string
+        required: false
+        default: linux/amd64,linux/arm64
+      context:
+        type: string
+        required: false
+        default: .
+      dockerfile:
+        type: string
+        required: false
+        default: Dockerfile
+      build-args:
+        description: аргументы сборки, по одному в строке
+        type: string
+        required: false
+        default: ''
+      latest:
+        description: двигать тег latest на эту сборку
+        type: boolean
+        required: false
+        default: true
+    secrets:
+      secret-build-args:
+        description: >-
+          Секретные аргументы сборки, по одному в строке. Внимание: ARG
+          виден в истории слоёв образа. Годится для ключа PrimeVue, который
+          и так уезжает в собранный JS, и не годится для того, что должно
+          остаться секретом.
+        required: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/${{ inputs.image != '' && inputs.image || github.event.repository.name }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable=${{ inputs.latest }}
+
+      # QEMU не нужен: сборочные стадии в шаблоне Dockerfile прибиты к
+      # BUILDPLATFORM, а Node и Go кросс-компилируют сами. Если стадия
+      # начнёт собираться под целевую платформу, сборка станет вчетверо
+      # длиннее — и это будет видно здесь, а не в проде.
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ inputs.context }}
+          file: ${{ inputs.context }}/${{ inputs.dockerfile }}
+          platforms: ${{ inputs.platforms }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            ${{ inputs.build-args }}
+            ${{ secrets.secret-build-args }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

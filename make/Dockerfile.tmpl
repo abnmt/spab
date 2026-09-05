@@ -1,0 +1,81 @@
+# Шаблон Dockerfile для «Go + Nuxt в одном бинарнике».
+#
+# Копируется в проект и правится руками: механизма include у Dockerfile
+# нет, а общий базовый образ экономил бы десяток строк ценой ещё одного
+# артефакта, который надо собирать, версионировать и держать в реестре.
+# Меняется этот файл раз в квартал — копипаста здесь дёшева.
+#
+# Что заменить после копирования:
+#   APP        — имя бинарника и пакета в cmd/
+#   DIST_PATH  — куда смотрит //go:embed all:dist
+#                (web/dist или internal/webui/dist)
+#   финальную стадию — базовый образ и список пакетов
+#
+# Обе сборочные стадии прибиты к платформе сборщика (BUILDPLATFORM). Node
+# и Go кросс-компилируют сами, а гонять их через QEMU ради linux/amd64 на
+# arm-ноутбуке — это кратное время сборки ни за что. Под целевую платформу
+# собирается только финальный слой, где своего кода нет.
+FROM --platform=$BUILDPLATFORM node:26-alpine AS web
+WORKDIR /web
+# pnpm ставим явно: corepack в образе больше не гарантирован.
+RUN npm install -g pnpm@11
+COPY web/package.json web/pnpm-lock.yaml ./
+# Слой с зависимостями — без скриптов: postinstall тут `nuxt prepare`, а
+# ему нужны и nuxt.config.ts, и app/, которых на этом шаге ещё нет.
+# Скрипты доигрываются вторым install, когда исходники на месте; он почти
+# мгновенный, пакеты уже в сторе.
+RUN pnpm install --frozen-lockfile --ignore-scripts
+COPY web/ ./
+RUN pnpm install --frozen-lockfile --prefer-offline
+# Лицензионный ключ PrimeVue. Обычно nuxt.config берёт его из корневого
+# .env или из secrets/primevue, но ни один из этих файлов в контекст
+# сборки не попадает (.dockerignore), поэтому здесь — только аргументом.
+# Пустой ключ сборку не ломает: интерфейс соберётся, но PrimeVue нарисует
+# поверх него красный баннер. Проектам без PrimeVue эти две строки не
+# нужны — удалить вместе с --build-arg в spab.mk (DOCKER_ARGS).
+ARG NUXT_PUBLIC_PRIMEUI_LICENSE=""
+ENV NUXT_PUBLIC_PRIMEUI_LICENSE=$NUXT_PUBLIC_PRIMEUI_LICENSE
+RUN pnpm generate
+
+FROM --platform=$BUILDPLATFORM golang:1.27-alpine AS build
+WORKDIR /src
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+# Интерфейс кладётся туда, откуда его забирает //go:embed all:dist.
+# Локальная сборка сюда не доедет: DIST_PATH исключён в .dockerignore,
+# чтобы вчерашняя статика с хоста не подменяла собранную стадией web.
+COPY --from=web /web/.output/public/ ./DIST_PATH/
+# Версию передаёт снаружи: .git в контекст сборки не попадает, поэтому
+# `git describe` тут не работает. spab.mk подставляет её из тега, без
+# --build-arg останется docker.
+ARG VERSION=docker
+# Подставляет buildx: amd64, arm64 и так далее.
+ARG TARGETARCH
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=$TARGETARCH \
+    go build -trimpath -ldflags "-s -w -X main.version=$VERSION" \
+    -o /APP ./cmd/APP
+
+FROM alpine:3.24
+# source привязывает опубликованный образ к репозиторию: без него пакет
+# висит сам по себе, без ссылки на код и README.
+LABEL org.opencontainers.image.source="https://github.com/abnmt/APP"
+# ca-certificates — для исходящего TLS, tzdata — чтобы работала
+# переменная TZ, wget — для healthcheck в compose.
+RUN apk add --no-cache ca-certificates tzdata wget \
+    && adduser -D -u 1000 APP \
+    # Каталоги томов заводятся здесь и с нужным владельцем. Иначе их
+    # создаёт докер при первом запуске — от root, а процесс работает под
+    # uid 1000, и приложение не сможет создать базу в /data.
+    && mkdir -p /data && chown APP:APP /data
+COPY --from=build /APP /usr/local/bin/APP
+
+VOLUME ["/data"]
+EXPOSE 8090
+
+USER APP
+# Флаги в CMD, а не в ENTRYPOINT: так остаётся рабочей подкоманда
+# `docker compose run --rm APP --export /seed /data`. Обратная сторона —
+# своя команда должна повторить --host и --no-open.
+ENTRYPOINT ["APP"]
+CMD ["--host", "0.0.0.0", "--no-open", "/data"]

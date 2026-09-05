@@ -1,0 +1,49 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*', 'pbspa/v*']
+  pull_request:
+
+# GOWORK=off везде намеренно: go.work подставляет локальный модуль вместо
+# зависимости и тем самым прячет забытый require. Потребитель работает без
+# workspace — CI обязан проверять то же самое.
+env:
+  GOWORK: 'off'
+
+jobs:
+  root:
+    name: spab
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          # Кэшировать нечего: у корневого модуля нет зависимостей, и это
+          # свойство, которое стоит охранять, — см. шаг «проверка графа».
+          cache: false
+      - name: gofmt
+        run: test -z "$(gofmt -l .)" || { echo "gofmt хочет поправить:"; gofmt -l .; exit 1; }
+      - run: go vet ./...
+      - run: go test ./... -race
+      - name: граф зависимостей пуст
+        run: |
+          extra=$(go list -m all | tail -n +2)
+          test -z "$extra" || { echo "в корневой модуль приехали зависимости:"; echo "$extra"; exit 1; }
+
+  pbspa:
+    name: pbspa
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: pbspa
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: pbspa/go.mod
+          cache-dependency-path: pbspa/go.sum
+      - run: go vet ./...
+      - run: go test ./... -race
