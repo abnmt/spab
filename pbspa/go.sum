@@ -1,5 +1,5 @@
-github.com/abnmt/spab v0.1.0 h1:aEmw2fMoUme8BLb385NVhJpqMRNe7KZ2YKXpMEqzi/4=
-github.com/abnmt/spab v0.1.0/go.mod h1:MpbrfSmm4gi2fhr5eKMyqgMQqGzQuwwfl93SswkFMU8=
+github.com/abnmt/spab v0.1.1 h1:YVnmxS42CKDCoqTUwXjN/vsuEWUMLmjUaqNRZKckIaE=
+github.com/abnmt/spab v0.1.1/go.mod h1:MpbrfSmm4gi2fhr5eKMyqgMQqGzQuwwfl93SswkFMU8=
 github.com/asaskevich/govalidator v0.0.0-20200108200545-475eaeb16496/go.mod h1:oGkLhpf+kjZl6xBf758TQhh5XrAeiJv/7FRz/2spLIg=
 github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2 h1:DklsrG3dyBCFEj5IhUbnKptjxatkF07cF2ak3yi77so=
 github.com/asaskevich/govalidator v0.0.0-20230301143203-a9d515a09cc2/go.mod h1:WaHUgvxTVq04UNunO+XhnAqY/wQc+bxr74GqbsZ/Jqw=

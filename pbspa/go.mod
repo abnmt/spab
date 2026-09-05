@@ -6,7 +6,7 @@ module github.com/abnmt/spab/pbspa
 go 1.27
 
 require (
-	github.com/abnmt/spab v0.1.0
+	github.com/abnmt/spab v0.1.1
 	github.com/pocketbase/pocketbase v0.40.1
 )
 
