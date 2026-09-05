@@ -40,21 +40,15 @@ jobs:
       run:
         working-directory: pbspa
     # Корневой модуль лежит в этом же репозитории, но с GOWORK=off Go тянет
-    # его тегированную версию по сети, а не из соседнего каталога — ровно
-    # так же, как это делает потребитель. Репозиторий приватный, поэтому
-    # proxy.golang.org до него не достаёт: GOPRIVATE отправляет Go прямо
-    # в git, а токен самого workflow даёт git туда доступ. Когда
-    # репозиторий станет публичным, обе строки можно снять.
-    env:
-      GOPRIVATE: github.com/abnmt/*
+    # его тегированную версию через proxy.golang.org, а не из соседнего
+    # каталога — ровно так же, как это делает потребитель. Ничего для этого
+    # настраивать не надо: репозиторий публичный именно затем, чтобы ни
+    # здесь, ни внутри docker build у приложений не понадобился токен.
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-go@v6
         with:
           go-version-file: pbspa/go.mod
           cache-dependency-path: pbspa/go.sum
-      - name: доступ к приватному корневому модулю
-        working-directory: .
-        run: git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
       - run: go vet ./...
       - run: go test ./... -race
