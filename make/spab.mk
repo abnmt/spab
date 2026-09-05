@@ -5,7 +5,7 @@
 # не тянется по сети при сборке: include по URL make не умеет, submodule
 # ломает и checkout в CI, и контекст docker build, а сборка обязана
 # работать без сети.
-SPAB_VERSION := v0.1.0
+SPAB_VERSION := v0.1.1
 #
 # Подключение из Makefile проекта:
 #
@@ -64,6 +64,10 @@ LINT_DIRS ?= ./cmd ./internal
 # ── Запуск ───────────────────────────────────────────────────────────────
 RUN_ARGS ?=
 DEV_ARGS ?= $(RUN_ARGS)
+# Окружение только для `make dev`. Нужно там, где nuxt dev ходит в Go-сервер
+# напрямую, а не через nitro.devProxy: тогда запросы идут с чужого origin и
+# сервер должен разрешить CORS — но только в режиме разработки.
+DEV_ENV  ?=
 
 # ── Контейнер и доставка ─────────────────────────────────────────────────
 DEPLOY_HOST     ?=
@@ -105,7 +109,7 @@ run: build ## собрать и запустить
 
 dev: ## Go-сервер + nuxt dev с горячей перезагрузкой
 	@$(if $(strip $(DIST)),mkdir -p $(DIST) && { [ -f $(DIST)/index.html ] || echo '<!doctype html>сборка интерфейса не нужна в режиме dev' > $(DIST)/index.html; },true)
-	$(GO) run $(PKG) $(DEV_ARGS) & \
+	$(DEV_ENV) $(GO) run $(PKG) $(DEV_ARGS) & \
 	  trap 'kill %1 2>/dev/null' EXIT; \
 	  $(PM_RUN) dev
 
@@ -180,8 +184,11 @@ deploy: ## собрать и перелить образ на сервер (DEPL
 	ssh $(DEPLOY_HOST) 'cd $(DEPLOY_DIR) && docker compose up -d' && \
 	echo "готово: $(DEPLOY_IMAGE):$(VERSION) работает на $(DEPLOY_HOST)"
 
+# WEB_OUT назван отдельно от $(WEB)/.output: у проекта, который собирает
+# интерфейс прямо в место embed'а, он лежит вообще в другом каталоге
+# (`nitro.output.publicDir`), и без этой строки сборка пережила бы clean.
 clean: ## удалить сборочные артефакты
-	rm -rf $(BINARY) build $(DIST) $(WEB)/.output $(WEB)/.nuxt
+	rm -rf $(BINARY) build $(DIST) $(WEB_OUT) $(WEB)/.output $(WEB)/.nuxt
 
 # Обновление самой копии. Версия называется явно: молчаливое подтягивание
 # «последней» ломало бы сборку в момент, который к правкам в проекте
